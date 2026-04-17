@@ -1,0 +1,6 @@
+#pasta do ambiente virtual
+venv/
+
+# Ignorar arquivos compilados Python
+__pycache__/
+*.py[cod]
