@@ -1,6 +1,15 @@
 #pasta do ambiente virtual
 venv/
+.venv/
 
 # Ignorar arquivos compilados Python
 __pycache__/
 *.py[cod]
+
+# Artefatos temporarios de notebooks e sistema
+.ipynb_checkpoints/
+.DS_Store
+
+# Logs e caches locais
+*.log
+.pytest_cache/
