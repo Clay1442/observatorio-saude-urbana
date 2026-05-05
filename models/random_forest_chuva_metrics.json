@@ -1,0 +1,75 @@
+{
+  "accuracy": 0.8205641796027374,
+  "confusion_matrix": [
+    [
+      9325,
+      1455,
+      306
+    ],
+    [
+      166,
+      453,
+      160
+    ],
+    [
+      9,
+      54,
+      54
+    ]
+  ],
+  "classification_report": {
+    "0": {
+      "precision": 0.9815789473684211,
+      "recall": 0.841151001262854,
+      "f1-score": 0.9059555037404061,
+      "support": 11086.0
+    },
+    "1": {
+      "precision": 0.2308868501529052,
+      "recall": 0.5815147625160462,
+      "f1-score": 0.3305363006202116,
+      "support": 779.0
+    },
+    "2": {
+      "precision": 0.10384615384615385,
+      "recall": 0.46153846153846156,
+      "f1-score": 0.1695447409733124,
+      "support": 117.0
+    },
+    "accuracy": 0.8205641796027374,
+    "macro avg": {
+      "precision": 0.4387706504558267,
+      "recall": 0.6280680751057872,
+      "f1-score": 0.46867884844464336,
+      "support": 11982.0
+    },
+    "weighted avg": {
+      "precision": 0.924202559405394,
+      "recall": 0.8205641796027374,
+      "f1-score": 0.8613543003958575,
+      "support": 11982.0
+    }
+  },
+  "feature_importance": {
+    "umid": 0.3616305776226342,
+    "temp": 0.24440254041224171,
+    "ponto_orvalho": 0.18273539973497402,
+    "press": 0.10736863843245345,
+    "delta_pressao": 0.10386284379769664
+  },
+  "features_used": [
+    "temp",
+    "umid",
+    "press",
+    "ponto_orvalho",
+    "delta_pressao"
+  ],
+  "missing_expected_features": [
+    "lux"
+  ],
+  "target_classes": {
+    "0": "Sem chuva - 0 mm",
+    "1": "Chuva fraca - 0.1 mm ate 5 mm",
+    "2": "Chuva moderada/forte - acima de 5 mm"
+  }
+}
