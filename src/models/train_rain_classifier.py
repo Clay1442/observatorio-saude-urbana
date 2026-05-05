@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import joblib
@@ -12,40 +13,24 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(PROJECT_ROOT))
+
+from src.utils.weather_features import (
+    EXPECTED_MODEL_FEATURES,
+    add_derived_weather_features,
+    fill_missing_numeric_values,
+    standardize_weather_columns,
+)
+
 CLIMATE_PATH = PROJECT_ROOT / "dados_formatados" / "FORTALEZA_DADOS_CLIMATICOS.csv"
 MODEL_PATH = PROJECT_ROOT / "models" / "random_forest_chuva.pkl"
 METRICS_PATH = PROJECT_ROOT / "models" / "random_forest_chuva_metrics.json"
 
-EXPECTED_FEATURES = ["temp", "umid", "press", "lux", "ponto_orvalho", "delta_pressao"]
-COLUMN_MAP = {
-    "CHUVA": "chuva",
-    "PRESSAO": "press",
-    "TEMP": "temp",
-    "UMID": "umid",
-    "RAD": "rad",
-    "DELTA_P": "delta_pressao",
-    "DT_LOCAL": "dt_local",
-    "DATA_LOCAL": "data_local",
-    "HORA_LOCAL": "hora_local",
-    "VENTO": "vento",
-}
-
-
-def calculate_dew_point(temp_celsius: pd.Series, humidity_percent: pd.Series) -> pd.Series:
-    """Calcula ponto de orvalho aproximado pela formula de Magnus."""
-    a = 17.27
-    b = 237.7
-    humidity = humidity_percent.clip(lower=1, upper=100)
-    alpha = ((a * temp_celsius) / (b + temp_celsius)) + np.log(humidity / 100)
-    return (b * alpha) / (a - alpha)
-
 
 def load_climate_data(path: Path = CLIMATE_PATH) -> pd.DataFrame:
     df = pd.read_csv(path, sep=";")
-    df = df.rename(columns={column: COLUMN_MAP.get(column, column.lower()) for column in df.columns})
-    return df
+    return standardize_weather_columns(df)
 
 
 def create_rain_category(precipitation_mm: pd.Series) -> pd.Series:
@@ -62,15 +47,10 @@ def prepare_training_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, li
     if "chuva" not in df.columns:
         raise ValueError("Coluna de precipitacao CHUVA/chuva nao encontrada.")
 
-    for column in ["temp", "umid", "press", "delta_pressao", "chuva"]:
-        if column in df.columns:
-            df[column] = pd.to_numeric(df[column], errors="coerce")
+    df = add_derived_weather_features(df)
 
-    if "ponto_orvalho" not in df.columns and {"temp", "umid"}.issubset(df.columns):
-        df["ponto_orvalho"] = calculate_dew_point(df["temp"], df["umid"])
-
-    available_features = [column for column in EXPECTED_FEATURES if column in df.columns]
-    missing_features = [column for column in EXPECTED_FEATURES if column not in df.columns]
+    available_features = [column for column in EXPECTED_MODEL_FEATURES if column in df.columns]
+    missing_features = [column for column in EXPECTED_MODEL_FEATURES if column not in df.columns]
 
     if not available_features:
         raise ValueError("Nenhuma variavel meteorologica esperada foi encontrada.")
@@ -78,8 +58,7 @@ def prepare_training_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, li
     model_df = df[available_features + ["chuva"]].copy()
     model_df = model_df.dropna(subset=["chuva"])
 
-    for column in available_features:
-        model_df[column] = model_df[column].fillna(model_df[column].median())
+    model_df = fill_missing_numeric_values(model_df, available_features)
 
     y = create_rain_category(model_df["chuva"])
     x = model_df[available_features]
