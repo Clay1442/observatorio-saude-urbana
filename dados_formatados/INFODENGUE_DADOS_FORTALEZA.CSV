@@ -1,4 +1,4 @@
-mes_ano,casos_mensais,nivel_alerta
+MES_REFERENCIA,casos_mensais,nivel_alerta
 2017-01-01,3328.0,2
 2017-02-01,5050.0,3
 2017-03-01,8238.0,4
