@@ -1,0 +1,21 @@
+Resumo da análise climática e epidemiológica (Fortaleza)
+Total de meses analisados: 97
+Queda média de pressão antes de meses com chuva: 0.744 mB
+
+Melhor lag por variável climática (|correlação| máxima):
+- chuva_acumulada: 1 mês(es) (~4.3 semanas), corr=0.606
+- pres_media: 4 mês(es) (~17.4 semanas), corr=-0.476
+- temp_media: 6 mês(es) (~26.1 semanas), corr=0.399
+- umid_media: 1 mês(es) (~4.3 semanas), corr=0.495
+
+Gatilhos de surto (surto definido por quartil 75 de casos de dengue):
+- Probabilidade base de surto: 0.258
+- Trigger exemplo (umidade > 80 e 24<=temp<=30): 1.000 (suporte=7 meses, lift=3.880)
+- Melhor trigger simples encontrado: umidade > 80, 22<=temp<=28, prob=1.000, lift=3.880, suporte=7
+
+Observação: a base atual não contém série de Zika separada; a correlação foi calculada para dengue.
+
+Validações automáticas:
+- correlacao_ok=min:-0.756,max:1.000
+- lag_ok=linhas:28
+- png_ok=arquivos:7
