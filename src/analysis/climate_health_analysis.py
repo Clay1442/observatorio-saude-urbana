@@ -6,44 +6,27 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-
 BASE_DIR = Path(__file__).resolve().parents[2]
-CLIMATE_PATH = BASE_DIR / "dados_formatados" / "FORTALEZA_DADOS_CLIMATICOS.csv"
-DENGUE_PATH = BASE_DIR / "dados_formatados" / "INFODENGUE_DADOS_FORTALEZA.CSV"
+from src.data.consolidation_pipeline import build_consolidated_dataframe
+
+# Pasta única para todos os artefatos da análise.
 OUTPUT_DIR = BASE_DIR / "data" / "processed" / "analise_climatica"
 
 
 def load_data() -> pd.DataFrame:
-    # Lê a base climática mensal (separador ; e vírgula decimal).
-    climate = pd.read_csv(
-        CLIMATE_PATH,
-        sep=";",
-        decimal=",",
-        encoding="utf-8-sig",
-    )
-    climate = climate.rename(
+    # Reutiliza a mesma consolidação do notebook (clima + infodengue + saneamento).
+    consolidated = build_consolidated_dataframe()
+    merged = consolidated.rename(
         columns={
             "MES_REFERENCIA": "mes_referencia",
             "Chuva_Acumulada": "chuva_acumulada",
             "Temp_Media_Mensal": "temp_media",
             "Umid_Media": "umid_media",
             "Pres_Media": "pres_media",
-        }
-    )
-    climate["mes_referencia"] = pd.to_datetime(climate["mes_referencia"], errors="coerce")
-
-    # Lê a base epidemiológica mensal consolidada.
-    dengue = pd.read_csv(DENGUE_PATH)
-    dengue = dengue.rename(
-        columns={
-            "MES_REFERENCIA": "mes_referencia",
             "casos_mensais": "casos_dengue",
         }
     )
-    dengue["mes_referencia"] = pd.to_datetime(dengue["mes_referencia"], errors="coerce")
-
-    # Junta apenas os meses que existem nas duas bases para evitar desalinhamento temporal.
-    merged = climate.merge(dengue[["mes_referencia", "casos_dengue"]], on="mes_referencia", how="inner")
+    # Garante sequência temporal limpa para os cálculos de lag e delta.
     merged = merged.dropna(subset=["mes_referencia"]).sort_values("mes_referencia").reset_index(drop=True)
     return merged
 
@@ -69,12 +52,14 @@ def pressure_drop_before_rain(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
     aux["delta_p"] = aux["pres_media"] - aux["pres_anterior"]
     aux["queda_antecede"] = aux["pres_anterior"] - aux["pres_media"]
 
+    # Considera meses com chuva registrada para medir queda de pressão anterior.
     rainy = aux[(aux["chuva_acumulada"] > 0) & aux["queda_antecede"].notna()]
     mean_drop = rainy.loc[rainy["queda_antecede"] > 0, "queda_antecede"].mean()
     return rainy, float(mean_drop) if pd.notna(mean_drop) else float("nan")
 
 
 def correlation_matrix(df: pd.DataFrame) -> pd.DataFrame:
+    # Matriz enxuta para o que foi pedido no ticket.
     cols = ["temp_media", "umid_media", "casos_dengue"]
     return df[cols].corr(method="pearson")
 
@@ -106,6 +91,7 @@ def trigger_analysis(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
     df = df.copy()
     df["surto"] = df["casos_dengue"] >= outbreak_threshold
 
+    # Regra exemplo solicitada no ticket.
     trigger = (df["umid_media"] > 80) & (df["temp_media"].between(24, 30))
     base_prob = df["surto"].mean()
     trigger_prob = df.loc[trigger, "surto"].mean() if trigger.any() else np.nan
@@ -145,12 +131,16 @@ def trigger_analysis(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
         "example_trigger_support_months": float(support),
         "example_trigger_lift": float(trigger_prob / base_prob) if base_prob > 0 and pd.notna(trigger_prob) else float("nan"),
     }
+    # Flatten do resultado da busca para facilitar consumo no resumo final.
     summary.update({f"best_{k}": float(v) if isinstance(v, (np.floating, float, int)) else v for k, v in best.items()})
     return df, summary
 
 
 def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Limpa PNGs antigos para não misturar gráficos de execuções com versões diferentes.
+    for old_png in OUTPUT_DIR.glob("*.png"):
+        old_png.unlink()
 
     # Heatmap da matriz de correlação de Pearson.
     plt.figure(figsize=(7, 5))
@@ -207,41 +197,75 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     plt.savefig(OUTPUT_DIR / "series_padronizadas_tendencia.png", dpi=150)
     plt.close()
 
-    # Dispersões com reta linear para leitura visual de relação.
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    for ax, xcol, title in [
-        (axes[0], "umid_media", "Umidade x Casos"),
-        (axes[1], "temp_media", "Temperatura x Casos"),
-    ]:
-        x = df[xcol].to_numpy()
-        y = df["casos_dengue"].to_numpy()
-        ax.scatter(x, y, alpha=0.7)
-        coeffs = np.polyfit(x, y, deg=1)
-        xx = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), 100)
-        yy = coeffs[0] * xx + coeffs[1]
-        ax.plot(xx, yy, color="red", linewidth=2)
-        ax.set_title(title)
-        ax.set_xlabel(xcol)
-        ax.set_ylabel("casos_dengue")
+    # Dispersão 1: umidade x casos.
+    plt.figure(figsize=(8, 5))
+    x = df["umid_media"].to_numpy()
+    y = df["casos_dengue"].to_numpy()
+    plt.scatter(x, y, alpha=0.7)
+    coeffs = np.polyfit(x, y, deg=1)
+    xx = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), 100)
+    yy = coeffs[0] * xx + coeffs[1]
+    plt.plot(xx, yy, color="red", linewidth=2)
+    plt.title("Umidade x Casos")
+    plt.xlabel("umid_media")
+    plt.ylabel("casos_dengue")
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "dispersao_clima_casos.png", dpi=150)
+    plt.savefig(OUTPUT_DIR / "dispersao_umidade_casos.png", dpi=150)
     plt.close()
 
-    # Sazonalidade média por mês do ano.
+    # Dispersão 2: temperatura x casos.
+    plt.figure(figsize=(8, 5))
+    x = df["temp_media"].to_numpy()
+    y = df["casos_dengue"].to_numpy()
+    plt.scatter(x, y, alpha=0.7)
+    coeffs = np.polyfit(x, y, deg=1)
+    xx = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), 100)
+    yy = coeffs[0] * xx + coeffs[1]
+    plt.plot(xx, yy, color="red", linewidth=2)
+    plt.title("Temperatura x Casos")
+    plt.xlabel("temp_media")
+    plt.ylabel("casos_dengue")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "dispersao_temperatura_casos.png", dpi=150)
+    plt.close()
+
+    # Sazonalidade média por mês do ano (casos).
     seasonal = df.copy()
     seasonal["mes"] = seasonal["mes_referencia"].dt.month
     grouped = seasonal.groupby("mes", as_index=False)[["chuva_acumulada", "umid_media", "temp_media", "casos_dengue"]].mean()
+    plt.figure(figsize=(8, 5))
+    plt.plot(grouped["mes"], grouped["casos_dengue"], marker="o", color="tab:red")
+    plt.title("Sazonalidade Média Mensal: Casos")
+    plt.xlabel("Mês do ano")
+    plt.ylabel("Casos de dengue")
+    plt.xticks(range(1, 13))
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "sazonalidade_casos.png", dpi=150)
+    plt.close()
+
+    # Sazonalidade média por mês do ano (chuva).
+    plt.figure(figsize=(8, 5))
+    plt.plot(grouped["mes"], grouped["chuva_acumulada"], marker="o", color="tab:blue")
+    plt.title("Sazonalidade Média Mensal: Chuva")
+    plt.xlabel("Mês do ano")
+    plt.ylabel("Chuva acumulada (mm)")
+    plt.xticks(range(1, 13))
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "sazonalidade_chuva.png", dpi=150)
+    plt.close()
+
+    # Resumo executivo: casos e chuva no mesmo canvas (2 eixos).
     fig, ax1 = plt.subplots(figsize=(10, 5))
     ax2 = ax1.twinx()
-    ax1.plot(grouped["mes"], grouped["casos_dengue"], marker="o", color="tab:red", label="casos_dengue")
-    ax2.plot(grouped["mes"], grouped["chuva_acumulada"], marker="o", color="tab:blue", label="chuva_acumulada")
-    ax1.set_title("Sazonalidade Média Mensal: Casos e Chuva")
+    ax1.plot(grouped["mes"], grouped["casos_dengue"], marker="o", color="tab:red", linewidth=2)
+    ax2.plot(grouped["mes"], grouped["chuva_acumulada"], marker="o", color="tab:blue", linewidth=2)
+    ax1.set_title("Resumo Executivo: Sazonalidade de Casos e Chuva")
     ax1.set_xlabel("Mês do ano")
     ax1.set_ylabel("Casos de dengue", color="tab:red")
     ax2.set_ylabel("Chuva acumulada (mm)", color="tab:blue")
     ax1.set_xticks(range(1, 13))
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "sazonalidade_casos_chuva.png", dpi=150)
+    plt.savefig(OUTPUT_DIR / "sazonalidade_casos_chuva_resumo.png", dpi=150)
     plt.close()
 
     # Probabilidade de surto em bins de temperatura x umidade.
@@ -269,6 +293,28 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     plt.ylabel("Faixas de umidade")
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "heatmap_prob_surto_temp_umidade.png", dpi=150)
+    plt.close()
+
+    # Resumo executivo: dispersões lado a lado para leitura rápida em apresentação.
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    pairs = [
+        ("umid_media", "Umidade x Casos"),
+        ("temp_media", "Temperatura x Casos"),
+    ]
+    for ax, (xcol, title) in zip(axes, pairs):
+        x = df[xcol].to_numpy()
+        y = df["casos_dengue"].to_numpy()
+        ax.scatter(x, y, alpha=0.7)
+        coeffs = np.polyfit(x, y, deg=1)
+        xx = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), 100)
+        yy = coeffs[0] * xx + coeffs[1]
+        ax.plot(xx, yy, color="red", linewidth=2)
+        ax.set_title(title)
+        ax.set_xlabel(xcol)
+        ax.set_ylabel("casos_dengue")
+    plt.suptitle("Resumo Executivo: Dispersões Clima x Casos", y=1.02)
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "dispersao_clima_casos_resumo.png", dpi=150)
     plt.close()
 
 
@@ -311,13 +357,16 @@ def validate_generated_outputs(corr: pd.DataFrame, lag_df: pd.DataFrame) -> list
 
 
 def main() -> None:
+    # 1) carga e validação de entrada
     df = load_data()
     validate_input_data(df)
+    # 2) cálculos principais
     rainy, mean_drop = pressure_drop_before_rain(df)
     corr = correlation_matrix(df)
     lag_df = lag_analysis(df)
     trigger_df, trigger_summary = trigger_analysis(df)
 
+    # 3) gráficos e exportações
     save_plots(df, corr, lag_df)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -335,6 +384,7 @@ def main() -> None:
         .first()
     )
 
+    # 4) resumo textual para leitura rápida da equipe
     summary_lines = [
         "Resumo da análise climática e epidemiológica (Fortaleza)",
         f"Total de meses analisados: {len(df)}",
@@ -366,6 +416,7 @@ def main() -> None:
     )
 
     (OUTPUT_DIR / "resumo_analise.txt").write_text("\n".join(summary_lines), encoding="utf-8")
+    # 5) checagens finais dos artefatos gerados
     validation_notes = validate_generated_outputs(corr, lag_df)
     with (OUTPUT_DIR / "resumo_analise.txt").open("a", encoding="utf-8") as f:
         f.write("\n\nValidações automáticas:\n")
