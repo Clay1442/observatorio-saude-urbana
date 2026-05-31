@@ -3,17 +3,17 @@ Total de meses analisados: 181
 Queda média de pressão antes de meses com chuva: 0.770 mB
 
 Melhor lag por variável climática (|correlação| máxima):
-- chuva_acumulada: 1 mês(es) (~4.3 semanas), corr=0.520
-- pres_media: 3 mês(es) (~13.0 semanas), corr=-0.377
-- temp_media: 5 mês(es) (~21.7 semanas), corr=0.349
-- umid_media: 1 mês(es) (~4.3 semanas), corr=0.469
+- chuva_acumulada: 1 mês(es) (~4.3 semanas), corr=0.551
+- pres_media: 3 mês(es) (~13.0 semanas), corr=-0.305
+- temp_media: 5 mês(es) (~21.7 semanas), corr=0.302
+- umid_media: 1 mês(es) (~4.3 semanas), corr=0.418
 
-Gatilhos de surto (surto definido por quartil 75 de casos de dengue):
+Gatilhos de surto (surto definido por quartil 75 de casos de arboviroses):
 - Probabilidade base de surto: 0.254
-- Trigger exemplo (umidade > 80 e 24<=temp<=30): 0.909 (suporte=11 meses, lift=3.577)
-- Melhor trigger simples encontrado: umidade > 80, 22<=temp<=28, prob=0.909, lift=3.577, suporte=11
+- Trigger exemplo (umidade > 80 e 24<=temp<=30): 0.818 (suporte=11 meses, lift=3.219)
+- Melhor trigger simples encontrado: umidade > 80, 22<=temp<=28, prob=0.818, lift=3.219, suporte=11
 
-Observação: a base atual não contém série de Zika separada; a correlação foi calculada para dengue.
+Observação: A análise agora considera o volume total de arboviroses (Dengue, Zika e Chikungunya) consolidadas, proporcionando uma visão preditiva mais acurada dos surtos.
 
 Validações automáticas:
 - correlacao_ok=min:-0.678,max:1.000

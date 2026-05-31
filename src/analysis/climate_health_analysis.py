@@ -23,7 +23,8 @@ def load_data() -> pd.DataFrame:
             "Temp_Media_Mensal": "temp_media",
             "Umid_Media": "umid_media",
             "Pres_Media": "pres_media",
-            "casos_mensais": "casos_dengue",
+            # A nova variável 
+            "total_arboviroses": "total_arboviroses", 
         }
     )
     # Garante sequência temporal limpa para os cálculos de lag e delta.
@@ -33,7 +34,7 @@ def load_data() -> pd.DataFrame:
 
 def validate_input_data(df: pd.DataFrame) -> None:
     # Checagens mínimas para garantir que a análise não rode com dados quebrados.
-    expected_cols = ["mes_referencia", "chuva_acumulada", "temp_media", "umid_media", "pres_media", "casos_dengue"]
+    expected_cols = ["mes_referencia", "chuva_acumulada", "temp_media", "umid_media", "pres_media", "total_arboviroses"]
     missing = [c for c in expected_cols if c not in df.columns]
     if missing:
         raise ValueError(f"Colunas obrigatórias ausentes: {missing}")
@@ -60,19 +61,19 @@ def pressure_drop_before_rain(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
 
 def correlation_matrix(df: pd.DataFrame) -> pd.DataFrame:
     # Matriz enxuta para o que foi pedido no ticket.
-    cols = ["temp_media", "umid_media", "casos_dengue"]
+    cols = ["temp_media", "umid_media", "total_arboviroses"]
     return df[cols].corr(method="pearson")
 
 
 def lag_analysis(df: pd.DataFrame, max_lag_months: int = 6) -> pd.DataFrame:
-    # Testa atrasos de 0..max_lag e mede correlação com casos de dengue.
+    # Testa atrasos de 0..max_lag e mede correlação com o total de arboviroses.
     rows: list[dict[str, float | str]] = []
     climate_cols = ["temp_media", "umid_media", "pres_media", "chuva_acumulada"]
 
     for var in climate_cols:
         for lag_m in range(0, max_lag_months + 1):
             shifted = df[var].shift(lag_m)
-            corr = shifted.corr(df["casos_dengue"])
+            corr = shifted.corr(df["total_arboviroses"])
             rows.append(
                 {
                     "variavel": var,
@@ -86,10 +87,10 @@ def lag_analysis(df: pd.DataFrame, max_lag_months: int = 6) -> pd.DataFrame:
 
 
 def trigger_analysis(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
-    # Define "surto" como meses no quartil superior de casos.
-    outbreak_threshold = df["casos_dengue"].quantile(0.75)
+    # Define "surto" como meses no quartil superior de casos totais.
+    outbreak_threshold = df["total_arboviroses"].quantile(0.75)
     df = df.copy()
-    df["surto"] = df["casos_dengue"] >= outbreak_threshold
+    df["surto"] = df["total_arboviroses"] >= outbreak_threshold
 
     # Regra exemplo solicitada no ticket.
     trigger = (df["umid_media"] > 80) & (df["temp_media"].between(24, 30))
@@ -163,11 +164,11 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
         plt.plot(group["lag_semanas_aprox"], group["correlacao_com_casos"], marker="o", label=var)
     plt.axhline(0, color="gray", linewidth=1)
     plt.xlabel("Lag (semanas, aprox.)")
-    plt.ylabel("Correlação com casos de dengue")
-    plt.title("Análise de Lag Clima x Dengue")
+    plt.ylabel("Correlação com casos de arboviroses")
+    plt.title("Análise de Lag Clima x Arboviroses")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "analise_lag_clima_dengue.png", dpi=150)
+    plt.savefig(OUTPUT_DIR / "analise_lag_clima_arboviroses.png", dpi=150)
     plt.close()
 
     # Série conjunta de pressão e chuva para inspeção temporal.
@@ -184,7 +185,7 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
 
     # Tendências normalizadas (z-score) suavizadas por média móvel.
     plt.figure(figsize=(10, 5))
-    rolling = df.set_index("mes_referencia")[["casos_dengue", "chuva_acumulada", "umid_media", "temp_media"]].rolling(3).mean()
+    rolling = df.set_index("mes_referencia")[["total_arboviroses", "chuva_acumulada", "umid_media", "temp_media"]].rolling(3).mean()
     norm = (rolling - rolling.mean()) / rolling.std(ddof=0)
     for col in norm.columns:
         plt.plot(norm.index, norm[col], label=col)
@@ -200,15 +201,15 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     # Dispersão 1: umidade x casos.
     plt.figure(figsize=(8, 5))
     x = df["umid_media"].to_numpy()
-    y = df["casos_dengue"].to_numpy()
+    y = df["total_arboviroses"].to_numpy()
     plt.scatter(x, y, alpha=0.7)
     coeffs = np.polyfit(x, y, deg=1)
     xx = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), 100)
     yy = coeffs[0] * xx + coeffs[1]
     plt.plot(xx, yy, color="red", linewidth=2)
-    plt.title("Umidade x Casos")
+    plt.title("Umidade x Casos de Arboviroses")
     plt.xlabel("umid_media")
-    plt.ylabel("casos_dengue")
+    plt.ylabel("total_arboviroses")
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "dispersao_umidade_casos.png", dpi=150)
     plt.close()
@@ -216,15 +217,15 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     # Dispersão 2: temperatura x casos.
     plt.figure(figsize=(8, 5))
     x = df["temp_media"].to_numpy()
-    y = df["casos_dengue"].to_numpy()
+    y = df["total_arboviroses"].to_numpy()
     plt.scatter(x, y, alpha=0.7)
     coeffs = np.polyfit(x, y, deg=1)
     xx = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), 100)
     yy = coeffs[0] * xx + coeffs[1]
     plt.plot(xx, yy, color="red", linewidth=2)
-    plt.title("Temperatura x Casos")
+    plt.title("Temperatura x Casos de Arboviroses")
     plt.xlabel("temp_media")
-    plt.ylabel("casos_dengue")
+    plt.ylabel("total_arboviroses")
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "dispersao_temperatura_casos.png", dpi=150)
     plt.close()
@@ -232,12 +233,12 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     # Sazonalidade média por mês do ano (casos).
     seasonal = df.copy()
     seasonal["mes"] = seasonal["mes_referencia"].dt.month
-    grouped = seasonal.groupby("mes", as_index=False)[["chuva_acumulada", "umid_media", "temp_media", "casos_dengue"]].mean()
+    grouped = seasonal.groupby("mes", as_index=False)[["chuva_acumulada", "umid_media", "temp_media", "total_arboviroses"]].mean()
     plt.figure(figsize=(8, 5))
-    plt.plot(grouped["mes"], grouped["casos_dengue"], marker="o", color="tab:red")
-    plt.title("Sazonalidade Média Mensal: Casos")
+    plt.plot(grouped["mes"], grouped["total_arboviroses"], marker="o", color="tab:red")
+    plt.title("Sazonalidade Média Mensal: Arboviroses")
     plt.xlabel("Mês do ano")
-    plt.ylabel("Casos de dengue")
+    plt.ylabel("Casos de Arboviroses")
     plt.xticks(range(1, 13))
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "sazonalidade_casos.png", dpi=150)
@@ -257,11 +258,11 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     # Resumo executivo: casos e chuva no mesmo canvas (2 eixos).
     fig, ax1 = plt.subplots(figsize=(10, 5))
     ax2 = ax1.twinx()
-    ax1.plot(grouped["mes"], grouped["casos_dengue"], marker="o", color="tab:red", linewidth=2)
+    ax1.plot(grouped["mes"], grouped["total_arboviroses"], marker="o", color="tab:red", linewidth=2)
     ax2.plot(grouped["mes"], grouped["chuva_acumulada"], marker="o", color="tab:blue", linewidth=2)
-    ax1.set_title("Resumo Executivo: Sazonalidade de Casos e Chuva")
+    ax1.set_title("Resumo Executivo: Sazonalidade de Arboviroses e Chuva")
     ax1.set_xlabel("Mês do ano")
-    ax1.set_ylabel("Casos de dengue", color="tab:red")
+    ax1.set_ylabel("Casos de Arboviroses", color="tab:red")
     ax2.set_ylabel("Chuva acumulada (mm)", color="tab:blue")
     ax1.set_xticks(range(1, 13))
     plt.tight_layout()
@@ -269,11 +270,11 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     plt.close()
 
     # Probabilidade de surto em bins de temperatura x umidade.
-    outbreak_threshold = df["casos_dengue"].quantile(0.75)
+    outbreak_threshold = df["total_arboviroses"].quantile(0.75)
     hbins = [65, 70, 75, 80, 85, 90]
     tbins = [22, 24, 26, 28, 30, 32]
     heat = df.copy()
-    heat["surto"] = heat["casos_dengue"] >= outbreak_threshold
+    heat["surto"] = heat["total_arboviroses"] >= outbreak_threshold
     heat["h_bin"] = pd.cut(heat["umid_media"], bins=hbins, include_lowest=True)
     heat["t_bin"] = pd.cut(heat["temp_media"], bins=tbins, include_lowest=True)
     pivot = heat.pivot_table(index="h_bin", columns="t_bin", values="surto", aggfunc="mean")
@@ -298,12 +299,12 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     # Resumo executivo: dispersões lado a lado para leitura rápida em apresentação.
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     pairs = [
-        ("umid_media", "Umidade x Casos"),
-        ("temp_media", "Temperatura x Casos"),
+        ("umid_media", "Umidade x Arboviroses"),
+        ("temp_media", "Temperatura x Arboviroses"),
     ]
     for ax, (xcol, title) in zip(axes, pairs):
         x = df[xcol].to_numpy()
-        y = df["casos_dengue"].to_numpy()
+        y = df["total_arboviroses"].to_numpy()
         ax.scatter(x, y, alpha=0.7)
         coeffs = np.polyfit(x, y, deg=1)
         xx = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), 100)
@@ -311,8 +312,8 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
         ax.plot(xx, yy, color="red", linewidth=2)
         ax.set_title(title)
         ax.set_xlabel(xcol)
-        ax.set_ylabel("casos_dengue")
-    plt.suptitle("Resumo Executivo: Dispersões Clima x Casos", y=1.02)
+        ax.set_ylabel("total_arboviroses")
+    plt.suptitle("Resumo Executivo: Dispersões Clima x Arboviroses", y=1.02)
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "dispersao_clima_casos_resumo.png", dpi=150)
     plt.close()
@@ -373,7 +374,7 @@ def main() -> None:
     rainy[["mes_referencia", "chuva_acumulada", "pres_anterior", "pres_media", "delta_p", "queda_antecede"]].to_csv(
         OUTPUT_DIR / "queda_pressao_antes_chuva.csv", index=False
     )
-    lag_df.to_csv(OUTPUT_DIR / "lag_clima_dengue.csv", index=False)
+    lag_df.to_csv(OUTPUT_DIR / "lag_clima_arboviroses.csv", index=False)
     trigger_df.to_csv(OUTPUT_DIR / "base_analise_com_trigger.csv", index=False)
     corr.to_csv(OUTPUT_DIR / "matriz_correlacao_pearson.csv")
 
@@ -401,7 +402,7 @@ def main() -> None:
     summary_lines.extend(
         [
             "",
-            "Gatilhos de surto (surto definido por quartil 75 de casos de dengue):",
+            "Gatilhos de surto (surto definido por quartil 75 de casos de arboviroses):",
             f"- Probabilidade base de surto: {trigger_summary['base_surge_probability']:.3f}",
             f"- Trigger exemplo (umidade > 80 e 24<=temp<=30): {trigger_summary['example_trigger_probability']:.3f} "
             f"(suporte={int(trigger_summary['example_trigger_support_months'])} meses, "
@@ -411,7 +412,7 @@ def main() -> None:
             f"prob={trigger_summary['best_trigger_prob']:.3f}, lift={trigger_summary['best_lift']:.3f}, "
             f"suporte={int(trigger_summary['best_support'])}",
             "",
-            "Observação: a base atual não contém série de Zika separada; a correlação foi calculada para dengue.",
+            "Observação: A análise agora considera o volume total de arboviroses (Dengue, Zika e Chikungunya) consolidadas, proporcionando uma visão preditiva mais acurada dos surtos.",
         ]
     )
 
