@@ -1,4 +1,4 @@
-mes_referencia,chuva_acumulada,temp_media,umid_media,pres_media,chikungunya,dengue,zika,total_arboviroses,nivel_alerta,Pop_sem_coleta_esgoto,Perc_sem_coleta_esgoto,surto
+mes_referencia,chuva_acumulada,temp_media,umid_media,pres_media,chikungunya,dengue,zika,total_arboviroses,nivel_alerta,Pop_sem_coleta_esgoto,perc_sem_esgoto,surto
 2010-01-01,53.4,28.3,70.43,1008.16,0.0,388.0,0.0,388.0,1.0,1267675.0,0.517,False
 2010-02-01,73.4,28.55,72.44,1007.43,0.0,301.0,0.0,301.0,1.0,1267675.0,0.517,False
 2010-03-01,39.2,28.86,70.78,1007.99,0.0,337.0,0.0,337.0,1.0,1267675.0,0.517,False

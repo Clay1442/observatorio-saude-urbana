@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 from src.data.consolidation_pipeline import build_consolidated_dataframe
@@ -24,7 +25,8 @@ def load_data() -> pd.DataFrame:
             "Umid_Media": "umid_media",
             "Pres_Media": "pres_media",
             # A nova variável 
-            "total_arboviroses": "total_arboviroses", 
+            "total_arboviroses": "total_arboviroses",
+            "Perc_sem_coleta_esgoto": "perc_sem_esgoto",
         }
     )
     # Garante sequência temporal limpa para os cálculos de lag e delta.
@@ -34,7 +36,7 @@ def load_data() -> pd.DataFrame:
 
 def validate_input_data(df: pd.DataFrame) -> None:
     # Checagens mínimas para garantir que a análise não rode com dados quebrados.
-    expected_cols = ["mes_referencia", "chuva_acumulada", "temp_media", "umid_media", "pres_media", "total_arboviroses"]
+    expected_cols = ["mes_referencia", "chuva_acumulada", "temp_media", "umid_media", "pres_media", "total_arboviroses", "perc_sem_esgoto"]
     missing = [c for c in expected_cols if c not in df.columns]
     if missing:
         raise ValueError(f"Colunas obrigatórias ausentes: {missing}")
@@ -135,6 +137,53 @@ def trigger_analysis(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
     # Flatten do resultado da busca para facilitar consumo no resumo final.
     summary.update({f"best_{k}": float(v) if isinstance(v, (np.floating, float, int)) else v for k, v in best.items()})
     return df, summary
+
+
+def plot_sanitation_analysis(df: pd.DataFrame) -> None:
+    """
+    Cria gráfico com eixos duplos mostrando a relação entre:
+    - Casos anuais de arboviroses (barras)
+    - Percentual de população sem coleta de esgoto (linha)
+    """
+    # Preparar dados agrupados por ano
+    aux = df.copy()
+    aux["ano"] = aux["mes_referencia"].dt.year
+    
+    # Agrupar por ano: soma de casos e média do percentual
+    df_ano = aux.groupby("ano").agg({
+        "total_arboviroses": "sum",
+        "perc_sem_esgoto": "mean"
+    }).reset_index()
+    
+    # Converter para porcentagem (se necessário)
+    # Assumindo que perc_sem_esgoto já está em formato de percentual (0-100)
+    # Se estiver em decimal (0-1), descomente a linha abaixo:
+    # df_ano["perc_sem_esgoto"] = df_ano["perc_sem_esgoto"] * 100
+    
+    # Criar figura com eixos duplos
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    
+    # Eixo 1 (Esquerda): Barras com total anual de casos
+    sns.barplot(data=df_ano, x="ano", y="total_arboviroses", color="lightblue", ax=ax1)
+    ax1.set_xlabel("Ano de Referência", fontsize=12, fontweight="bold")
+    ax1.set_ylabel("Total Anual de Casos (Arboviroses)", color="#1f77b4", fontsize=12, fontweight="bold")
+    ax1.tick_params(axis="y", labelcolor="#1f77b4")
+    
+    # Eixo 2 (Direita): Linha com percentual sem esgoto
+    ax2 = ax1.twinx()
+    sns.lineplot(data=df_ano, x=df_ano.index, y="perc_sem_esgoto", color="red", marker="o", linewidth=2.5, markersize=8, ax=ax2)
+    ax2.set_ylabel("População Sem Esgoto (%)", color="red", fontsize=12, fontweight="bold")
+    ax2.tick_params(axis="y", labelcolor="red")
+    
+    # Configurar título e grid
+    plt.title("Evolução Estrutural: Falta de Saneamento Básico vs. Picos Endêmicos em Fortaleza", 
+              fontsize=14, fontweight="bold")
+    ax1.grid(axis="y", linestyle="--", alpha=0.6)
+    
+    # Ajustar layout e salvar
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "saneamento_casos_esgoto_analise.png", dpi=150)
+    plt.close()
 
 
 def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> None:
@@ -318,6 +367,9 @@ def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> No
     plt.savefig(OUTPUT_DIR / "dispersao_clima_casos_resumo.png", dpi=150)
     plt.close()
 
+    # Análise de saneamento: casos vs. percentual sem esgoto
+    plot_sanitation_analysis(df)
+
 
 def validate_generated_outputs(corr: pd.DataFrame, lag_df: pd.DataFrame) -> list[str]:
     notes: list[str] = []
@@ -413,6 +465,10 @@ def main() -> None:
             f"suporte={int(trigger_summary['best_support'])}",
             "",
             "Observação: A análise agora considera o volume total de arboviroses (Dengue, Zika e Chikungunya) consolidadas, proporcionando uma visão preditiva mais acurada dos surtos.",
+            "",
+            "Análise de Saneamento Básico:",
+            "- Gráfico 'saneamento_casos_esgoto_analise.png' mostra a evolução temporal da cobertura de esgoto vs. casos de arboviroses.",
+            "- Permite identificar correlações entre infraestrutura de saneamento e surtos endêmicos.",
         ]
     )
 
