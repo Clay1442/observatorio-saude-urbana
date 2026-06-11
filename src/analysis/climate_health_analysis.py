@@ -141,49 +141,84 @@ def trigger_analysis(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
 
 def plot_sanitation_analysis(df: pd.DataFrame) -> None:
     """
-    Cria gráfico com eixos duplos mostrando a relação entre:
-    - Casos anuais de arboviroses (barras)
-    - Percentual de população sem coleta de esgoto (linha)
+    Gera gráficos anuais mostrando:
+    - Total de casos de arboviroses por ano
+    - Volume anual de chuva (jan-dez) por ano
+    - Percentual médio anual de população sem coleta de esgoto
     """
-    # Preparar dados agrupados por ano
     aux = df.copy()
     aux["ano"] = aux["mes_referencia"].dt.year
-    
-    # Agrupar por ano: soma de casos e média do percentual
-    df_ano = aux.groupby("ano").agg({
+    aux = aux[aux["ano"].between(2010, 2024)]
+    if aux.empty:
+        raise ValueError("Não há dados de saneamento no intervalo de anos 2010-2024.")
+
+    df_ano = aux.groupby("ano", as_index=False).agg({
         "total_arboviroses": "sum",
-        "perc_sem_esgoto": "mean"
-    }).reset_index()
-    
-    # Converter para porcentagem (se necessário)
-    # Assumindo que perc_sem_esgoto já está em formato de percentual (0-100)
-    # Se estiver em decimal (0-1), descomente a linha abaixo:
-    # df_ano["perc_sem_esgoto"] = df_ano["perc_sem_esgoto"] * 100
-    
-    # Criar figura com eixos duplos
+        "chuva_acumulada": "sum",
+        "perc_sem_esgoto": "mean",
+    })
+
+    if df_ano["perc_sem_esgoto"].max() <= 1.0:
+        df_ano["perc_sem_esgoto"] = df_ano["perc_sem_esgoto"] * 100
+
+    anos = df_ano["ano"].to_numpy()
+    casos = df_ano["total_arboviroses"].to_numpy()
+    chuva = df_ano["chuva_acumulada"].to_numpy()
+    saneamento = df_ano["perc_sem_esgoto"].to_numpy()
+
+    # Gráfico 1: Casos x Chuva Anual
     fig, ax1 = plt.subplots(figsize=(12, 6))
-    
-    # Eixo 1 (Esquerda): Barras com total anual de casos
-    sns.barplot(data=df_ano, x="ano", y="total_arboviroses", color="lightblue", ax=ax1)
+    bar_width = 0.6
+    ax1.bar(anos, casos, width=bar_width, color="lightblue", label="Casos Anuais")
     ax1.set_xlabel("Ano de Referência", fontsize=12, fontweight="bold")
     ax1.set_ylabel("Total Anual de Casos (Arboviroses)", color="#1f77b4", fontsize=12, fontweight="bold")
     ax1.tick_params(axis="y", labelcolor="#1f77b4")
-    
-    # Eixo 2 (Direita): Linha com percentual sem esgoto
+    ax1.set_xticks(anos)
+    ax1.set_xticklabels(anos, rotation=45)
+
     ax2 = ax1.twinx()
-    sns.lineplot(data=df_ano, x=df_ano.index, y="perc_sem_esgoto", color="red", marker="o", linewidth=2.5, markersize=8, ax=ax2)
+    ax2.plot(anos, chuva, color="darkblue", marker="o", linewidth=2.5, markersize=8, label="Chuva Anual")
+    ax2.set_ylabel("Chuva Acumulada Anual (mm)", color="darkblue", fontsize=12, fontweight="bold")
+    ax2.tick_params(axis="y", labelcolor="darkblue")
+
+    fig.suptitle(
+        "Gatilho Climático: Volume Anual de Chuvas vs. Surtos Endêmicos em Fortaleza",
+        fontsize=14,
+        fontweight="bold",
+    )
+    ax1.grid(axis="y", linestyle="--", alpha=0.6)
+    fig.tight_layout()
+    fig.subplots_adjust(top=0.92)
+    fig.savefig(OUTPUT_DIR / "chuva_anual_casos_analise.png", dpi=150)
+    plt.close(fig)
+
+    # Gráfico 2: Casos x Saneamento
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    ax1.bar(anos, casos, width=bar_width, color="lightblue", label="Casos Anuais")
+    ax1.set_xlabel("Ano de Referência", fontsize=12, fontweight="bold")
+    ax1.set_ylabel("Total Anual de Casos (Arboviroses)", color="#1f77b4", fontsize=12, fontweight="bold")
+    ax1.tick_params(axis="y", labelcolor="#1f77b4")
+    ax1.set_xticks(anos)
+    ax1.set_xticklabels(anos, rotation=45)
+
+    ax2 = ax1.twinx()
+    ax2.plot(anos, saneamento, color="red", marker="o", linewidth=2.5, markersize=8, label="População Sem Esgoto (%)")
     ax2.set_ylabel("População Sem Esgoto (%)", color="red", fontsize=12, fontweight="bold")
     ax2.tick_params(axis="y", labelcolor="red")
-    
-    # Configurar título e grid
-    plt.title("Evolução Estrutural: Falta de Saneamento Básico vs. Picos Endêmicos em Fortaleza", 
-              fontsize=14, fontweight="bold")
+    ax2.set_ylim(0, max(100, saneamento.max() * 1.05))
+    ax2.set_yticks([0, 20, 40, 60, 80, 100])
+    ax2.set_yticklabels(["0%", "20%", "40%", "60%", "80%", "100%"])
+
+    fig.suptitle(
+        "Evolução Estrutural: Falta de Saneamento Básico vs. Picos Endêmicos em Fortaleza",
+        fontsize=14,
+        fontweight="bold",
+    )
     ax1.grid(axis="y", linestyle="--", alpha=0.6)
-    
-    # Ajustar layout e salvar
-    plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "saneamento_casos_esgoto_analise.png", dpi=150)
-    plt.close()
+    fig.tight_layout()
+    fig.subplots_adjust(top=0.92)
+    fig.savefig(OUTPUT_DIR / "saneamento_casos_esgoto_analise.png", dpi=150)
+    plt.close(fig)
 
 
 def save_plots(df: pd.DataFrame, corr: pd.DataFrame, lag_df: pd.DataFrame) -> None:
