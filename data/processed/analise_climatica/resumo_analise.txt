@@ -1,0 +1,25 @@
+Resumo da análise climática e epidemiológica (Fortaleza)
+Total de meses analisados: 181
+Queda média de pressão antes de meses com chuva: 0.770 mB
+
+Melhor lag por variável climática (|correlação| máxima):
+- chuva_acumulada: 1 mês(es) (~4.3 semanas), corr=0.551
+- pres_media: 3 mês(es) (~13.0 semanas), corr=-0.305
+- temp_media: 5 mês(es) (~21.7 semanas), corr=0.302
+- umid_media: 1 mês(es) (~4.3 semanas), corr=0.418
+
+Gatilhos de surto (surto definido por quartil 75 de casos de arboviroses):
+- Probabilidade base de surto: 0.254
+- Trigger exemplo (umidade > 80 e 24<=temp<=30): 0.818 (suporte=11 meses, lift=3.219)
+- Melhor trigger simples encontrado: umidade > 80, 22<=temp<=28, prob=0.818, lift=3.219, suporte=11
+
+Observação: A análise agora considera o volume total de arboviroses (Dengue, Zika e Chikungunya) consolidadas, proporcionando uma visão preditiva mais acurada dos surtos.
+
+Análise de Saneamento Básico:
+- Gráfico 'saneamento_casos_esgoto_analise.png' mostra a evolução temporal da cobertura de esgoto vs. casos de arboviroses.
+- Permite identificar correlações entre infraestrutura de saneamento e surtos endêmicos.
+
+Validações automáticas:
+- correlacao_ok=min:-0.678,max:1.000
+- lag_ok=linhas:28
+- png_ok=arquivos:13
